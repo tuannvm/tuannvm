@@ -18,9 +18,9 @@ jobs:
           filename: metrics.svg
 
           # Visual config
-          config_display: columns
+          config_display: large
           config_animations: yes
-          config_padding: 0, 10 + 10%
+          config_padding: 6%
 
           # Base stats
           base: header, repositories
