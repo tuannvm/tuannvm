@@ -17,43 +17,35 @@ jobs:
           token: ${{ secrets.METRICS_TOKEN }}
           filename: metrics.svg
 
-          # Base stats (commits, stars, repos, etc.)
-          base: header, activity, repositories
+          # Visual config
+          config_display: columns
+          config_animations: yes
+          config_padding: 0, 10 + 10%
+
+          # Base stats
+          base: header, repositories
           base_indepth: yes
 
-          # Repositories traffic (shows total views/clones)
-          plugin_traffic: yes
+          # Isometric commit calendar (reliable visual)
+          plugin_isocalendar: yes
+          plugin_isocalendar_duration: half-year
 
           # Languages breakdown
           plugin_languages: yes
-          plugin_languages_analysis_timeout: 15
-          plugin_languages_categories: markup, programming
-          plugin_languages_colors: github
           plugin_languages_limit: 8
           plugin_languages_sections: most-used
+          plugin_languages_colors: github
           plugin_languages_details: percentage
-
-          # Notable contributions
-          plugin_notable: yes
-          plugin_notable_from: organization
-          plugin_notable_types: commit
-
-          # Recent activity
-          plugin_activity: yes
-          plugin_activity_limit: 5
-          plugin_activity_days: 14
-          plugin_activity_filter: all
 
           # Your top repos by stars
           plugin_repositories: yes
           plugin_repositories_starred: 5
           plugin_repositories_forks: no
 
-          # Habits (coding patterns)
-          plugin_habits: yes
-          plugin_habits_from: 200
-          plugin_habits_days: 14
-          plugin_habits_charts: yes
+          # Lines of code changed
+          plugin_lines: yes
+          plugin_lines_history_limit: 1
+          plugin_lines_sections: base
 
           # Config
           config_timezone: America/Los_Angeles
