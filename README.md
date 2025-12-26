@@ -1,26 +1,15 @@
-<picture>
-  <source
-    srcset="https://github-readme-stats.vercel.app/api?username=tuannvm&show_icons=true&theme=dark"
-    media="(prefers-color-scheme: dark)"
-  />
-  <source
-    srcset="https://github-readme-stats.vercel.app/api?username=tuannvm&show_icons=true"
-    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
-  />
-  <img src="https://github-readme-stats.vercel.app/api?username=tuannvm&show_icons=true" />
-</picture>
+```
+ _
+| |_ _   _  __ _ _ __  _ ____   ___ __ ___
+| __| | | |/ _` | '_ \| '_ \ \ / / '_ ` _ \
+| |_| |_| | (_| | | | | | | \ V /| | | | | |
+ \__|\__,_|\__,_|_| |_|_| |_|\_/ |_| |_| |_|
+```
 
-<!--
-**tuannvm/tuannvm** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+**Engineering Manager**
 
-Here are some ideas to get you started:
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/tuannvm)
+[![X](https://img.shields.io/badge/X-000000?logo=x&logoColor=white)](https://x.com/tuannvm)
+[![Website](https://img.shields.io/badge/tuannvm.com-000000?logo=safari&logoColor=white)](https://tuannvm.com/)
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+![Metrics](./metrics.svg)
