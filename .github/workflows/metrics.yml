@@ -2,9 +2,7 @@ name: Metrics
 on:
   schedule:
     - cron: "0 0 * * *"  # Runs daily at midnight UTC
-  workflow_dispatch:  # Manual trigger
-  push:
-    branches: ["main"]
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
   github-metrics:
@@ -21,14 +19,10 @@ jobs:
           config_display: large
           config_animations: yes
           config_padding: 6%
+          config_timezone: America/Los_Angeles
 
-          # Base stats
+          # Base stats (simplified - no indepth to save API calls)
           base: header, repositories
-          base_indepth: yes
-
-          # Isometric commit calendar (reliable visual)
-          plugin_isocalendar: yes
-          plugin_isocalendar_duration: half-year
 
           # Languages breakdown
           plugin_languages: yes
@@ -41,11 +35,3 @@ jobs:
           plugin_repositories: yes
           plugin_repositories_starred: 5
           plugin_repositories_forks: no
-
-          # Lines of code changed
-          plugin_lines: yes
-          plugin_lines_history_limit: 1
-          plugin_lines_sections: base
-
-          # Config
-          config_timezone: America/Los_Angeles
