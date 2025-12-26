@@ -1,11 +1,3 @@
-```
- _
-| |_ _   _  __ _ _ __  _ ____   ___ __ ___
-| __| | | |/ _` | '_ \| '_ \ \ / / '_ ` _ \
-| |_| |_| | (_| | | | | | | \ V /| | | | | |
- \__|\__,_|\__,_|_| |_|_| |_|\_/ |_| |_| |_|
-```
-
 **Engineering Manager**
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/tuannvm)
