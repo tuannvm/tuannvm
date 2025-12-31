@@ -20,8 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iproute2 \
   dnsutils \
   jq \
-  nano \
-  vim \
+  neovim \
   telnet \
   iputils-ping \
   traceroute \
@@ -84,8 +83,8 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 ENV SHELL=/bin/zsh
 
 # Set the default editor and visual
-ENV EDITOR=nano
-ENV VISUAL=nano
+ENV EDITOR=nvim
+ENV VISUAL=nvim
 
 # Default powerline10k theme
 ARG ZSH_IN_DOCKER_VERSION=1.2.1
@@ -95,6 +94,7 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
   -a "source /usr/share/doc/fzf/examples/completion.zsh" \
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+  -a "alias vi=nvim" \
   -x
 
 # Install Claude
