@@ -1,0 +1,70 @@
+FROM ubuntu:24.04
+
+# Metadata
+LABEL maintainer="tuannvm"
+LABEL description="Ubuntu with Homebrew pre-installed for development"
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NONINTERACTIVE=1
+
+# Set locale
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Install prerequisites in a single layer with cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    sudo \
+    build-essential \
+    ca-certificates \
+    locales \
+    procps \
+    less \
+    vim \
+    nano \
+    jq \
+    unzip \
+    zip \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for Homebrew with limited sudo
+RUN useradd -m -s /bin/bash brewuser && \
+    echo "brewuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/brewuser && \
+    chmod 440 /etc/sudoers.d/brewuser
+
+# DNS fix script - will run at container start
+# Only fixes if DNS is broken (checks for empty resolv.conf)
+RUN echo '#!/bin/sh' > /usr/local/bin/fix-dns && \
+    echo '# Fix DNS for Apple Containers if DNS is broken' >> /usr/local/bin/fix-dns && \
+    echo 'if [ ! -s /etc/resolv.conf ] || ! grep -q "nameserver" /etc/resolv.conf 2>/dev/null; then' >> /usr/local/bin/fix-dns && \
+    echo '  if [ -w /etc/resolv.conf ]; then' >> /usr/local/bin/fix-dns && \
+    echo '    echo "nameserver 8.8.8.8" > /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
+    echo '    echo "nameserver 8.8.4.4" >> /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
+    echo '  fi' >> /usr/local/bin/fix-dns && \
+    echo 'fi' >> /usr/local/bin/fix-dns && \
+    echo 'exit 0' >> /usr/local/bin/fix-dns && \
+    chmod +x /usr/local/bin/fix-dns
+
+# Install Homebrew as brewuser
+# Note: This requires network during build - CI environment handles this
+# Pinned to v4.4.2 for reproducibility
+USER brewuser
+RUN curl -fsSL https://raw.githubusercontent.com/Homebrew/install/4.4.2/install.sh -o /tmp/install.sh && \
+    sha256sum /tmp/install.sh && \
+    /bin/bash /tmp/install.sh && \
+    rm /tmp/install.sh && \
+    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"' >> /home/brewuser/.bashrc
+
+# Set up environment
+ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+WORKDIR /home/brewuser
+
+# Run DNS fix on startup, then start shell
+CMD ["/bin/bash", "-lc", "/usr/local/bin/fix-dns && exec /bin/bash -l"]
