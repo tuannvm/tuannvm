@@ -1,0 +1,65 @@
+name: Build Claude Image
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.devcontainer/Dockerfile.claude'
+      - '.github/workflows/claude-build.yml'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - '.devcontainer/Dockerfile.claude'
+      - '.github/workflows/claude-build.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/tuannvm/tuannvm
+
+jobs:
+  build-and-push:
+    name: Build and Push Claude Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.7.0
+        with:
+          platforms: amd64,arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.12.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (with :claude tag)
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: ./.devcontainer/Dockerfile.claude
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:claude
+            ${{ env.IMAGE_NAME }}:claude-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.title=Claude Code + CCC Environment
+            org.opencontainers.image.description=Ubuntu with Claude Code and CCC (Claude Code Companion) pre-installed
+            org.opencontainers.image.version=2.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            CLAUDE_VERSION=latest
+            CCC_VERSION=latest

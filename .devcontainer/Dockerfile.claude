@@ -1,0 +1,155 @@
+# Multi-stage build for smaller, more secure image
+FROM golang:1.24-bookworm AS ccc-builder
+
+# Build arguments for version pinning
+ARG CCC_VERSION=latest
+ARG CCC_REF=main
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build CCC
+WORKDIR /src
+RUN if [ "$CCC_VERSION" = "latest" ]; then \
+        git clone --depth 1 https://github.com/tuannvm/ccc.git .; \
+    else \
+        git clone --depth 1 --branch "${CCC_VERSION}" https://github.com/tuannvm/ccc.git .; \
+    fi
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ccc .
+
+# Runtime stage
+FROM ubuntu:24.04@sha256:5387a6e95c27d6946066a843e1245bed65177a4db8434df4b28c10808fd3a64d
+
+# Metadata
+LABEL maintainer="tuannvm"
+LABEL description="Ubuntu with Claude Code and CCC (Claude Code Companion)"
+LABEL version="2.0"
+
+# Build arguments for version pinning  
+ARG NODE_VERSION=22
+ARG CLAUDE_VERSION=latest
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NONINTERACTIVE=1
+
+# Set locale
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Install runtime dependencies only
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    # Core dependencies
+    curl \
+    ca-certificates \
+    locales \
+    procps \
+    # Claude Code dependencies
+    nodejs \
+    npm \
+    # CCC dependencies  
+    tmux \
+    git \
+    jq \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code with pinned version
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION}
+
+# Install tini for proper signal handling
+RUN curl -fsSL https://github.com/krallin/tini/releases/download/v0.19.0/tini -o /usr/local/bin/tini && \
+    chmod +x /usr/local/bin/tini
+
+# Create non-root user (no sudo needed)
+RUN useradd -m -s /bin/bash cccuser
+
+# DNS fix script (preserved from Dockerfile.ubuntu)
+RUN echo '#!/bin/sh' > /usr/local/bin/fix-dns && \
+    echo '# Fix DNS for Apple Containers if DNS is broken' >> /usr/local/bin/fix-dns && \
+    echo 'if [ ! -s /etc/resolv.conf ] || ! grep -q "nameserver" /etc/resolv.conf 2>/dev/null; then' >> /usr/local/bin/fix-dns && \
+    echo '  if [ -w /etc/resolv.conf ]; then' >> /usr/local/bin/fix-dns && \
+    echo '    echo "nameserver 8.8.8.8" > /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
+    echo '    echo "nameserver 8.8.4.4" >> /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
+    echo '  fi' >> /usr/local/bin/fix-dns && \
+    echo 'fi' >> /usr/local/bin/fix-dns && \
+    echo 'exit 0' >> /usr/local/bin/fix-dns && \
+    chmod +x /usr/local/bin/fix-dns
+
+# Copy CCC binary from builder
+COPY --from=ccc-builder /out/ccc /usr/local/bin/ccc
+RUN chmod +x /usr/local/bin/ccc
+
+# Setup as cccuser
+USER cccuser
+WORKDIR /home/cccuser
+
+# Create directory structure
+RUN mkdir -p ~/.config/ccc /home/cccuser/projects ~/.cache/ccc
+
+# Create default CCC config with multi-user mode enabled
+RUN echo '{' > ~/.config/ccc/config.json && \
+    echo '  "multi_user_mode": true,' >> ~/.config/ccc/config.json && \
+    echo '  "projects_dir": "/home/cccuser/projects"' >> ~/.config/ccc/config.json && \
+    echo '}' >> ~/.config/ccc/config.json && \
+    chmod 600 ~/.config/ccc/config.json
+
+# Add helpful aliases to .bashrc
+RUN echo '# CCC aliases' >> ~/.bashrc && \
+    echo 'alias ccc-status="pgrep -f ccc || echo CCC not running"' >> ~/.bashrc && \
+    echo 'alias ccc-stop="pkill -f ccc"' >> ~/.bashrc && \
+    echo 'alias ccc-log="tail -f ~/.cache/ccc/ccc.log"' >> ~/.bashrc && \
+    echo 'alias ccc-restart="pkill -f ccc && sleep 1 && ccc-listen &"' >> ~/.bashrc && \
+    echo '' >> ~/.bashrc && \
+    echo '# Show welcome message' >> ~/.bashrc && \
+    echo 'echo "🤖 CCC Docker Environment"' >> ~/.bashrc && \
+    echo 'echo "Multi-user mode: ENABLED (default)"' >> ~/.bashrc && \
+    echo 'echo "Configure: ccc setup <bot_token>"' >> ~/.bashrc && \
+    echo 'echo ""' >> ~/.bashrc
+
+# Set environment
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Expose relay port for file transfers
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD pgrep -f "ccc listen" || exit 1
+
+# Volumes for persistent data
+VOLUME ["/home/cccuser/.config/ccc", "/home/cccuser/projects", "/home/cccuser/.cache/ccc"]
+
+# Startup script that runs CCC listener in background
+RUN echo '#!/bin/bash' > ~/docker-entrypoint.sh && \
+    echo 'fix-dns' >> ~/docker-entrypoint.sh && \
+    echo '' >> ~/docker-entrypoint.sh && \
+    echo '# Start CCC listener in background if configured' >> ~/docker-entrypoint.sh && \
+    echo 'if [ -f ~/.config/ccc/config.json ] && grep -q "bot_token" ~/.config/ccc/config.json 2>/dev/null; then' >> ~/docker-entrypoint.sh && \
+    echo '    echo "🚀 Starting CCC listener..."' >> ~/docker-entrypoint.sh && \
+    echo '    ccc listen >> ~/.cache/ccc/ccc.log 2>&1 &' >> ~/docker-entrypoint.sh && \
+    echo '    sleep 2' >> ~/docker-entrypoint.sh && \
+    echo '    if pgrep -f "ccc listen" > /dev/null; then' >> ~/docker-entrypoint.sh && \
+    echo '        echo "✅ CCC listener started"' >> ~/docker-entrypoint.sh && \
+    echo '    else' >> ~/docker-entrypoint.sh && \
+    echo '        echo "⚠️  CCC listener failed to start. Check logs with: ccc-log"' >> ~/docker-entrypoint.sh && \
+    echo '    fi' >> ~/docker-entrypoint.sh && \
+    echo 'else' >> ~/docker-entrypoint.sh && \
+    echo '    echo "⚠️  CCC not configured. Run: ccc setup <bot_token>"' >> ~/docker-entrypoint.sh && \
+    echo 'fi' >> ~/docker-entrypoint.sh && \
+    echo '' >> ~/docker-entrypoint.sh && \
+    echo 'exec "$@"' >> ~/docker-entrypoint.sh && \
+    chmod +x ~/docker-entrypoint.sh
+
+# Use tini for proper signal handling and zombie process reaping
+ENTRYPOINT ["/usr/local/bin/tini", "--", "/home/cccuser/docker-entrypoint.sh"]
+
+# Run shell (CCC will auto-start in background if configured)
+CMD ["/bin/bash", "-l"]
