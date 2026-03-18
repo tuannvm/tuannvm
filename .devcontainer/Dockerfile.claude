@@ -21,7 +21,7 @@ RUN if [ "$CCC_VERSION" = "latest" ]; then \
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ccc .
 
 # Runtime stage
-FROM ubuntu:24.04@sha256:5387a6e95c27d6946066a843e1245bed65177a4db8434df4b28c10808fd3a64d
+FROM ubuntu:24.04@sha256:67efaecc0031a612cf7bb3c863407018dbbef0a971f62032b77aa542ac8ac0d2
 
 # Metadata
 LABEL maintainer="tuannvm"
