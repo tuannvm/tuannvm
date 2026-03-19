@@ -106,4 +106,4 @@ RUN printf '#!/bin/sh\nfix-dns\n\n# Start CCC listener in background if configur
 ENTRYPOINT ["/usr/local/bin/tini", "--", "/home/cccuser/docker-entrypoint.sh"]
 
 # Run shell (CCC will auto-start in background if configured)
-CMD ["/bin/sh", "-l"]
+CMD ["/bin/sh"]
