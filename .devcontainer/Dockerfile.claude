@@ -20,73 +20,56 @@ RUN if [ "$CCC_VERSION" = "latest" ]; then \
     fi
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ccc .
 
-# Runtime stage
-FROM ubuntu:24.04@sha256:67efaecc0031a612cf7bb3c863407018dbbef0a971f62032b77aa542ac8ac0d2
+# Runtime stage - Alpine for Apple Container arm64 compatibility
+FROM alpine:3.21
 
 # Metadata
 LABEL maintainer="tuannvm"
-LABEL description="Ubuntu with Claude Code and CCC (Claude Code Companion)"
-LABEL version="2.0"
+LABEL description="Alpine with Claude Code and CCC (Claude Code Companion)"
+LABEL version="2.1"
 
-# Build arguments for version pinning  
+# Build arguments for version pinning
 ARG NODE_VERSION=22
 ARG CLAUDE_VERSION=latest
 
 # Prevent interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
 ENV NONINTERACTIVE=1
 
-# Set locale
-ENV LANG=en_US.UTF-8
-ENV LC_ALL=en_US.UTF-8
+# Set locale (musl uses C.UTF-8 by default)
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
-# Install runtime dependencies only
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    # Core dependencies
+# Install runtime dependencies
+RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
+    apk add --no-cache \
     curl \
     ca-certificates \
-    locales \
-    procps \
-    # Claude Code dependencies
     nodejs \
     npm \
-    # CCC dependencies  
     tmux \
     git \
     jq \
-    && locale-gen en_US.UTF-8 \
-    && update-locale LANG=en_US.UTF-8 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    procps \
+    bash
 
 # Install Claude Code with pinned version
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION}
 
-# Install tini for proper signal handling
+# Install tini for proper signal handling (static, no libc deps)
 ARG TARGETARCH
 RUN curl -fsSL https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-${TARGETARCH} -o /usr/local/bin/tini && \
     chmod +x /usr/local/bin/tini
 
-# Create non-root user (no sudo needed)
-RUN useradd -m -s /bin/bash cccuser
-
-# DNS fix script (preserved from Dockerfile.ubuntu)
-RUN echo '#!/bin/sh' > /usr/local/bin/fix-dns && \
-    echo '# Fix DNS for Apple Containers if DNS is broken' >> /usr/local/bin/fix-dns && \
-    echo 'if [ ! -s /etc/resolv.conf ] || ! grep -q "nameserver" /etc/resolv.conf 2>/dev/null; then' >> /usr/local/bin/fix-dns && \
-    echo '  if [ -w /etc/resolv.conf ]; then' >> /usr/local/bin/fix-dns && \
-    echo '    echo "nameserver 8.8.8.8" > /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
-    echo '    echo "nameserver 8.8.4.4" >> /etc/resolv.conf' >> /usr/local/bin/fix-dns && \
-    echo '  fi' >> /usr/local/bin/fix-dns && \
-    echo 'fi' >> /usr/local/bin/fix-dns && \
-    echo 'exit 0' >> /usr/local/bin/fix-dns && \
+# DNS fix script
+RUN printf '#!/bin/sh\n# Fix DNS for Apple Containers if DNS is broken\nif [ ! -s /etc/resolv.conf ] || ! grep -q "nameserver" /etc/resolv.conf 2>/dev/null; then\n  if [ -w /etc/resolv.conf ]; then\n    echo "nameserver 8.8.8.8" > /etc/resolv.conf\n    echo "nameserver 8.8.4.4" >> /etc/resolv.conf\n  fi\nfi\nexit 0\n' > /usr/local/bin/fix-dns && \
     chmod +x /usr/local/bin/fix-dns
 
 # Copy CCC binary from builder
 COPY --from=ccc-builder /out/ccc /usr/local/bin/ccc
 RUN chmod +x /usr/local/bin/ccc
+
+# Create non-root user
+RUN adduser -D -s /bin/sh cccuser
 
 # Setup as cccuser
 USER cccuser
@@ -96,24 +79,11 @@ WORKDIR /home/cccuser
 RUN mkdir -p ~/.config/ccc /home/cccuser/projects ~/.cache/ccc
 
 # Create default CCC config with multi-user mode enabled
-RUN echo '{' > ~/.config/ccc/config.json && \
-    echo '  "multi_user_mode": true,' >> ~/.config/ccc/config.json && \
-    echo '  "projects_dir": "/home/cccuser/projects"' >> ~/.config/ccc/config.json && \
-    echo '}' >> ~/.config/ccc/config.json && \
+RUN printf '{\n  "multi_user_mode": true,\n  "projects_dir": "/home/cccuser/projects"\n}\n' > ~/.config/ccc/config.json && \
     chmod 600 ~/.config/ccc/config.json
 
-# Add helpful aliases to .bashrc
-RUN echo '# CCC aliases' >> ~/.bashrc && \
-    echo 'alias ccc-status="pgrep -f ccc || echo CCC not running"' >> ~/.bashrc && \
-    echo 'alias ccc-stop="pkill -f ccc"' >> ~/.bashrc && \
-    echo 'alias ccc-log="tail -f ~/.cache/ccc/ccc.log"' >> ~/.bashrc && \
-    echo 'alias ccc-restart="pkill -f ccc && sleep 1 && ccc-listen &"' >> ~/.bashrc && \
-    echo '' >> ~/.bashrc && \
-    echo '# Show welcome message' >> ~/.bashrc && \
-    echo 'echo "🤖 CCC Docker Environment"' >> ~/.bashrc && \
-    echo 'echo "Multi-user mode: ENABLED (default)"' >> ~/.bashrc && \
-    echo 'echo "Configure: ccc setup <bot_token>"' >> ~/.bashrc && \
-    echo 'echo ""' >> ~/.bashrc
+# Add helpful aliases to .shrc (POSIX shell profile)
+RUN printf '# CCC aliases\nalias ccc-status="pgrep -f ccc || echo CCC not running"\nalias ccc-stop="pkill -f ccc"\nalias ccc-log="tail -f ~/.cache/ccc/ccc.log"\nalias ccc-restart="pkill -f ccc && sleep 1 && ccc-listen &"\n\necho "CCC Docker Environment (Alpine)"\necho "Multi-user mode: ENABLED (default)"\necho "Configure: ccc setup <bot_token>"\necho ""\n' >> ~/.shrc
 
 # Set environment
 ENV PATH="/usr/local/bin:${PATH}"
@@ -128,29 +98,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Volumes for persistent data
 VOLUME ["/home/cccuser/.config/ccc", "/home/cccuser/projects", "/home/cccuser/.cache/ccc"]
 
-# Startup script that runs CCC listener in background
-RUN echo '#!/bin/bash' > ~/docker-entrypoint.sh && \
-    echo 'fix-dns' >> ~/docker-entrypoint.sh && \
-    echo '' >> ~/docker-entrypoint.sh && \
-    echo '# Start CCC listener in background if configured' >> ~/docker-entrypoint.sh && \
-    echo 'if [ -f ~/.config/ccc/config.json ] && grep -q "bot_token" ~/.config/ccc/config.json 2>/dev/null; then' >> ~/docker-entrypoint.sh && \
-    echo '    echo "🚀 Starting CCC listener..."' >> ~/docker-entrypoint.sh && \
-    echo '    ccc listen >> ~/.cache/ccc/ccc.log 2>&1 &' >> ~/docker-entrypoint.sh && \
-    echo '    sleep 2' >> ~/docker-entrypoint.sh && \
-    echo '    if pgrep -f "ccc listen" > /dev/null; then' >> ~/docker-entrypoint.sh && \
-    echo '        echo "✅ CCC listener started"' >> ~/docker-entrypoint.sh && \
-    echo '    else' >> ~/docker-entrypoint.sh && \
-    echo '        echo "⚠️  CCC listener failed to start. Check logs with: ccc-log"' >> ~/docker-entrypoint.sh && \
-    echo '    fi' >> ~/docker-entrypoint.sh && \
-    echo 'else' >> ~/docker-entrypoint.sh && \
-    echo '    echo "⚠️  CCC not configured. Run: ccc setup <bot_token>"' >> ~/docker-entrypoint.sh && \
-    echo 'fi' >> ~/docker-entrypoint.sh && \
-    echo '' >> ~/docker-entrypoint.sh && \
-    echo 'exec "$@"' >> ~/docker-entrypoint.sh && \
+# Startup script (POSIX sh, no bashisms)
+RUN printf '#!/bin/sh\nfix-dns\n\n# Start CCC listener in background if configured\nif [ -f ~/.config/ccc/config.json ] && grep -q "bot_token" ~/.config/ccc/config.json 2>/dev/null; then\n    echo "Starting CCC listener..."\n    ccc listen >> ~/.cache/ccc/ccc.log 2>&1 &\n    sleep 2\n    if pgrep -f "ccc listen" > /dev/null; then\n        echo "CCC listener started"\n    else\n        echo "CCC listener failed to start. Check logs with: ccc-log"\n    fi\nelse\n    echo "CCC not configured. Run: ccc setup <bot_token>"\nfi\n\nexec "$@"\n' > ~/docker-entrypoint.sh && \
     chmod +x ~/docker-entrypoint.sh
 
 # Use tini for proper signal handling and zombie process reaping
 ENTRYPOINT ["/usr/local/bin/tini", "--", "/home/cccuser/docker-entrypoint.sh"]
 
 # Run shell (CCC will auto-start in background if configured)
-CMD ["/bin/bash", "-l"]
+CMD ["/bin/sh", "-l"]
